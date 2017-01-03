@@ -1,65 +1,41 @@
 var Heap       = require('heap');
 var Util       = require('../core/Util');
 var Heuristic  = require('../core/Heuristic');
-var DiagonalMovement = require('../core/DiagonalMovement');
 
 /**
- * A* path-finder. Based upon https://github.com/bgrins/javascript-astar
+ * A* path-finder.
+ * based upon https://github.com/bgrins/javascript-astar
  * @constructor
- * @param {Object} opt
+ * @param {object} opt
  * @param {boolean} opt.allowDiagonal Whether diagonal movement is allowed.
- *     Deprecated, use diagonalMovement instead.
- * @param {boolean} opt.dontCrossCorners Disallow diagonal movement touching 
- *     block corners. Deprecated, use diagonalMovement instead.
- * @param {DiagonalMovement} opt.diagonalMovement Allowed diagonal movement.
+ * @param {boolean} opt.dontCrossCorners Disallow diagonal movement touching block corners.
  * @param {function} opt.heuristic Heuristic function to estimate the distance
  *     (defaults to manhattan).
- * @param {number} opt.weight Weight to apply to the heuristic to allow for
- *     suboptimal paths, in order to speed up the search.
+ * @param {integer} opt.weight Weight to apply to the heuristic to allow for suboptimal paths,
+ *     in order to speed up the search.
  */
-function AStarFinder(opt) {
+function TraceFinder(opt) {
     opt = opt || {};
     this.allowDiagonal = opt.allowDiagonal;
     this.dontCrossCorners = opt.dontCrossCorners;
     this.heuristic = opt.heuristic || Heuristic.manhattan;
-    this.weight = opt.weight || 1;
-    this.diagonalMovement = opt.diagonalMovement;
-
-    if (!this.diagonalMovement) {
-        if (!this.allowDiagonal) {
-            this.diagonalMovement = DiagonalMovement.Never;
-        } else {
-            if (this.dontCrossCorners) {
-                this.diagonalMovement = DiagonalMovement.OnlyWhenNoObstacles;
-            } else {
-                this.diagonalMovement = DiagonalMovement.IfAtMostOneObstacle;
-            }
-        }
-    }
-
-    // When diagonal movement is allowed the manhattan heuristic is not
-    //admissible. It should be octile instead
-    if (this.diagonalMovement === DiagonalMovement.Never) {
-        this.heuristic = opt.heuristic || Heuristic.manhattan;
-    } else {
-        this.heuristic = opt.heuristic || Heuristic.octile;
-    }
 }
 
 /**
  * Find and return the the path.
- * @return {Array<Array<number>>} The path, including both start and
+ * @return {Array.<[number, number]>} The path, including both start and
  *     end positions.
  */
-AStarFinder.prototype.findPath = function(startX, startY, endX, endY, grid) {
+TraceFinder.prototype.findPath = function(startX, startY, endX, endY, grid) {
+
     var openList = new Heap(function(nodeA, nodeB) {
             return nodeA.f - nodeB.f;
         }),
         startNode = grid.getNodeAt(startX, startY),
         endNode = grid.getNodeAt(endX, endY),
         heuristic = this.heuristic,
-        diagonalMovement = this.diagonalMovement,
-        weight = this.weight,
+        allowDiagonal = this.allowDiagonal,
+        dontCrossCorners = this.dontCrossCorners,
         abs = Math.abs, SQRT2 = Math.SQRT2,
         node, neighbors, neighbor, i, l, x, y, ng;
 
@@ -83,7 +59,10 @@ AStarFinder.prototype.findPath = function(startX, startY, endX, endY, grid) {
         }
 
         // get neigbours of the current node
-        neighbors = grid.getNeighbors(node, diagonalMovement);
+        neighbors = grid.getNeighbors(node, allowDiagonal, dontCrossCorners);
+
+        var ar = neighbors.length;
+
         for (i = 0, l = neighbors.length; i < l; ++i) {
             neighbor = neighbors[i];
 
@@ -101,18 +80,21 @@ AStarFinder.prototype.findPath = function(startX, startY, endX, endY, grid) {
             // check if the neighbor has not been inspected yet, or
             // can be reached with smaller cost from the current node
             if (!neighbor.opened || ng < neighbor.g) {
-                neighbor.g = ng;
-                neighbor.h = neighbor.h || weight * heuristic(abs(x - endX), abs(y - endY));
+                neighbor.g = ng * ar/9; //the trace magic
+                neighbor.h = neighbor.h || heuristic(abs(x - endX), abs(y - endY));
                 neighbor.f = neighbor.g + neighbor.h;
                 neighbor.parent = node;
 
                 if (!neighbor.opened) {
+                    //openList.push(neighbor);
                     openList.push(neighbor);
                     neighbor.opened = true;
                 } else {
                     // the neighbor can be reached with smaller cost.
                     // Since its f value has been updated, we have to
                     // update its position in the open list
+
+                    //openList.updateItem(neighbor);
                     openList.updateItem(neighbor);
                 }
             }
@@ -123,4 +105,4 @@ AStarFinder.prototype.findPath = function(startX, startY, endX, endY, grid) {
     return [];
 };
 
-module.exports = AStarFinder;
+module.exports = TraceFinder;
